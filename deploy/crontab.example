@@ -1,0 +1,8 @@
+# Cron alternative to the always-on service.
+# Runs the pipeline every 30 minutes and posts the result to the log file.
+# Install with:  crontab -e   (then paste the lines below, paths adjusted)
+
+*/30 * * * * cd /opt/tg-autopost && .venv/bin/autopost once >> data/cron.log 2>&1
+
+# Housekeeping once a day at 04:00
+0 4 * * * cd /opt/tg-autopost && find data/media -type f -mtime +7 -delete

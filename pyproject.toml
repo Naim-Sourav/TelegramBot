@@ -1,0 +1,50 @@
+[project]
+name = "tg-autopost"
+version = "1.0.0"
+description = "Telegram channel autopilot: reads similar channels with a userbot, rewrites posts with AI, publishes to your channel."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "TelegramBot" }]
+dependencies = [
+    "telethon>=1.36,<2",
+    "aiogram>=3.13,<4",
+    "httpx>=0.27,<1",
+    "pydantic>=2.7,<3",
+    "pydantic-settings>=2.3,<3",
+    "aiosqlite>=0.20,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.6",
+]
+
+[project.scripts]
+autopost = "autopost.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+# BLE = blind `except Exception` – used on purpose around network calls,
+# with logging. PYI034 needs typing_extensions.Self (py3.11+), we target 3.10.
+select = ["E", "F", "W", "I", "B", "BLE", "UP", "C4", "SIM", "ISC", "PIE", "TRY", "RUF"]
+ignore = ["PYI034", "TRY003", "TRY400", "RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["BLE001"]

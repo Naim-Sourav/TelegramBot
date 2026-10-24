@@ -1,0 +1,31 @@
+[Unit]
+Description=Telegram channel autopost bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# ---- adjust these two lines to your install path ----
+WorkingDirectory=/opt/tg-autopost
+EnvironmentFile=/opt/tg-autopost/.env
+ExecStart=/opt/tg-autopost/.venv/bin/autopost run
+# -----------------------------------------------------
+Restart=always
+RestartSec=10
+User=autopost
+Group=autopost
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/tg-autopost/data
+
+# gentle shutdown so pending publishes finish
+KillSignal=SIGINT
+TimeoutStopSec=30
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=autopost
+
+[Install]
+WantedBy=multi-user.target

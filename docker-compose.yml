@@ -1,0 +1,15 @@
+services:
+  autopost:
+    build: .
+    image: tg-autopost:latest
+    container_name: tg-autopost
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      # keeps the sqlite db, the userbot session and downloaded media
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import autopost, sys; sys.exit(0)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
