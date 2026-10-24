@@ -241,6 +241,26 @@ docker compose up -d
 docker compose logs -f --tail=100
 ```
 
+### অপশন B2 — GitHub Actions (সার্ভার ছাড়াই, ফ্রি)
+
+`deploy/GITHUB_ACTIONS.md` দেখুন — পুরো ধাপে ধাপে গাইড। সংক্ষেপে:
+
+1. `autopost login --string` → `TG_STRING_SESSION` নিন (ফাইল রাখা যায় না)
+2. রিপো → **Settings → Secrets and variables → Actions**:
+   **Secrets:** `TG_API_ID`, `TG_API_HASH`, `TG_STRING_SESSION`, `BOT_TOKEN`, `AI_API_KEY`
+   **Variables:** `TARGET_CHANNEL`, `SOURCE_CHANNELS`, বাকিগুলো ঐচ্ছিক
+3. **Actions → Autopost → Run workflow** (`dry_run=true` দিয়ে প্রথমে)
+
+```bash
+make session      # স্ট্রিং সেশন
+make gh-secrets   # .env থেকে সব সিক্রেট/ভেরিয়েবল পুশ
+make gh-run       # ম্যানুয়াল dry-run
+```
+
+> ⚠️ GitHub Actions-এ বট ২৪/৭ চলে না — তাই **✅ রিভিউ বাটন কাজ করবে না**,
+> `AUTO_PUBLISH=true` বাধ্যতামূলক। রিভিউ মোড চাইলে VPS/Docker ব্যবহার করুন।
+> ডুপ্লিকেট লেজার `autopost-state` ব্র্যাঞ্চে সেভ হয়, তাই রানগুলোর মধ্যে মনে থাকে।
+
 ### অপশন C — শুধু cron (বট কমান্ড ও বাটন ছাড়া)
 
 `deploy/crontab.example` দেখুন — `autopost once` প্রতি ৩০ মিনিটে চালায়। এই মোডে

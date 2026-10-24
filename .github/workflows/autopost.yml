@@ -1,0 +1,141 @@
+name: Autopost
+
+# GitHub-এ হোস্ট করা অটোপোস্ট: নির্দিষ্ট সময় পরপর সোর্স চ্যানেল স্ক্যান করে
+# নতুন পোস্ট চ্যানেলে পাবলিশ করে। কোনো সার্ভার লাগে না।
+#
+# ⚠️ মনে রাখুন: এখানে বট ২৪ ঘণ্টা চলে না, তাই "রিভিউ + ✅ বাটন" কাজ করবে না।
+#    এই মোডে AUTO_PUBLISH=true বাধ্যতামূলক (নিচে সেট করা আছে)।
+
+on:
+  schedule:
+    # প্রতি ঘণ্টায় (UTC)। ফ্রি কোটা বাঁচাতে ঘণ্টায় একবার রাখা ভালো।
+    # প্রতি ৩০ মিনিটে চাইলে: "*/30 * * * *"  (private repo-তে মিনিট বেশি লাগবে)
+    - cron: "0 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "শুধু দেখাবে, কিছু পোস্ট করবে না"
+        type: boolean
+        default: false
+
+# একসাথে দুটো রান যেন না হয় (নইলে একই পোস্ট দুইবার যেতে পারে)
+concurrency:
+  group: autopost-publish
+  cancel-in-progress: false
+
+permissions:
+  contents: write # state ব্র্যাঞ্চে sqlite সেভ করার জন্য
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      # ------------- credentials (Settings → Secrets and variables → Actions)
+      TG_API_ID: ${{ secrets.TG_API_ID }}
+      TG_API_HASH: ${{ secrets.TG_API_HASH }}
+      TG_STRING_SESSION: ${{ secrets.TG_STRING_SESSION }}
+      BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+      AI_API_KEY: ${{ secrets.AI_API_KEY }}
+
+      # ------------- normal config (Variables – সিক্রেট নয়)
+      TARGET_CHANNEL: ${{ vars.TARGET_CHANNEL }}
+      SOURCE_CHANNELS: ${{ vars.SOURCE_CHANNELS }}
+      OWNER_USER_IDS: ${{ vars.OWNER_USER_IDS }}
+      AI_PROVIDER: ${{ vars.AI_PROVIDER || 'openai' }}
+      AI_MODEL: ${{ vars.AI_MODEL || 'gpt-4o-mini' }}
+      POST_LANGUAGE: ${{ vars.POST_LANGUAGE || 'bn' }}
+      CHANNEL_TITLE: ${{ vars.CHANNEL_TITLE }}
+      CHANNEL_PERSONA: ${{ vars.CHANNEL_PERSONA }}
+      SIGNATURE: ${{ vars.SIGNATURE }}
+      STYLE_RULES: ${{ vars.STYLE_RULES }}
+      HASHTAG_COUNT: ${{ vars.HASHTAG_COUNT || '3' }}
+      MAX_POST_CHARS: ${{ vars.MAX_POST_CHARS || '900' }}
+      MAX_POSTS_PER_RUN: ${{ vars.MAX_POSTS_PER_RUN || '3' }}
+      DAILY_POST_LIMIT: ${{ vars.DAILY_POST_LIMIT || '12' }}
+      MIN_SOURCE_AGE_MINUTES: ${{ vars.MIN_SOURCE_AGE_MINUTES || '10' }}
+      MAX_SOURCE_AGE_HOURS: ${{ vars.MAX_SOURCE_AGE_HOURS || '72' }}
+      BLOCKED_KEYWORDS: ${{ vars.BLOCKED_KEYWORDS }}
+      MEDIA_ENABLED: ${{ vars.MEDIA_ENABLED || 'true' }}
+      TIMEZONE: ${{ vars.TIMEZONE || 'Asia/Dhaka' }}
+
+      # কোন বট অনুমোদন দেবে? এখানে কেউ নেই → সরাসরি পাবলিশ
+      AUTO_PUBLISH: "true"
+
+      DATA_DIR: data
+      LOG_LEVEL: INFO
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install .
+
+      - name: Restore state (dedupe ledger)
+        run: |
+          mkdir -p data
+          if git fetch --depth=1 origin autopost-state 2>/dev/null; then
+            if git cat-file -e FETCH_HEAD:data/autopost.sqlite3 2>/dev/null; then
+              git show FETCH_HEAD:data/autopost.sqlite3 > data/autopost.sqlite3
+              echo "✅ state restored: $(wc -c < data/autopost.sqlite3) bytes"
+            else
+              echo "state ব্র্যাঞ্চ আছে কিন্তু ফাইল নেই – নতুন করে শুরু"
+            fi
+          else
+            echo "প্রথম রান – কোনো state ব্র্যাঞ্চ নেই, নতুন করে শুরু"
+          fi
+
+      - name: Run pipeline
+        run: |
+          # খালি variable থাকলে env থেকে সরিয়ে দিই, যাতে ডিফল্ট মান কাজ করে
+          for name in TARGET_CHANNEL SOURCE_CHANNELS OWNER_USER_IDS CHANNEL_TITLE \
+                      CHANNEL_PERSONA SIGNATURE STYLE_RULES BLOCKED_KEYWORDS \
+                      TG_STRING_SESSION; do
+            if [ -z "${!name}" ]; then unset "$name"; fi
+          done
+
+          if [ -z "${SOURCE_CHANNELS}" ]; then
+            echo "::error::SOURCE_CHANNELS variable সেট করা নেই (Settings → Variables)"
+            exit 1
+          fi
+          if [ -z "${TARGET_CHANNEL}" ]; then
+            echo "::error::TARGET_CHANNEL variable সেট করা নেই (Settings → Variables)"
+            exit 1
+          fi
+
+          FLAGS="--force"
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            FLAGS="$FLAGS --dry-run"
+            echo "::notice::dry-run মোড – কিছুই পাবলিশ হবে না"
+          fi
+
+          autopost once $FLAGS
+
+      - name: Save state (dedupe ledger)
+        if: always()
+        run: |
+          if [ ! -s data/autopost.sqlite3 ]; then
+            echo "সেভ করার মতো state নেই"
+            exit 0
+          fi
+          git config user.name "autopost"
+          git config user.email "autopost@users.noreply.github.com"
+
+          # working branch-এ হাত না দিয়ে সরাসরি একটা কমিট বানিয়ে push করি
+          blob=$(git hash-object -w data/autopost.sqlite3)
+          git read-tree --empty
+          git update-index --add --cacheinfo 100644,"$blob",data/autopost.sqlite3
+          tree=$(git write-tree)
+          commit=$(git commit-tree "$tree" -m "state: $(date -u +%FT%TZ)")
+          git push --force origin "$commit:refs/heads/autopost-state"
+          echo "✅ state সেভ হয়েছে (autopost-state ব্র্যাঞ্চ)"

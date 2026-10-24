@@ -1,4 +1,4 @@
-.PHONY: help install login check demo test lint run once docker-build docker-up docker-logs
+.PHONY: help install login check demo test lint run once docker-build docker-up docker-logs gh-secrets gh-run session
 
 help:
 	@echo "install      – venv তৈরি করে ডিপেন্ডেন্সি ইনস্টল করবে"
@@ -9,6 +9,8 @@ help:
 	@echo "run          – সার্ভিস চালু (বট + শিডিউলার)"
 	@echo "once         – একবার স্ক্যান (cron-এর জন্য)"
 	@echo "docker-up    – Docker Compose দিয়ে চালু"
+	@echo "session      – GitHub Actions-এর জন্য TG_STRING_SESSION বানাবে"
+	@echo "gh-secrets   – .env থেকে GitHub Secrets/Variables পুশ করবে"
 
 install:
 	python3 -m venv .venv
@@ -31,6 +33,16 @@ test:
 
 lint:
 	.venv/bin/ruff check src tests
+
+session:
+	.venv/bin/autopost login --string
+
+gh-secrets:
+	./scripts/push_github_secrets.sh
+
+gh-run:
+	gh workflow run autopost.yml -f dry_run=true
+	@echo "→ gh run watch  দিয়ে লগ দেখুন"
 
 run:
 	.venv/bin/autopost run
